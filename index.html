@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>行事曆產生器</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #f2efe8;
+  --surface:      #faf8f4;
+  --surface2:     #eeebe3;
+  --border:       #d6d0c4;
+  --accent:       #2d6a4f;
+  --accent-light: #e4f0ea;
+  --accent2:      #52b788;
+  --text:         #1e2d26;
+  --muted:        #7a8c7e;
+  --danger:       #c0392b;
+  --danger-light: #fdf0ee;
+  --shadow:       0 2px 16px rgba(45,106,79,0.08);
+  --shadow-md:    0 4px 32px rgba(45,106,79,0.13);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Sans TC', sans-serif;
+  min-height: 100vh;
+  padding: 40px 20px 100px;
+}
+
+body::before {
+  content: '';
+  position: fixed; top: -120px; right: -120px;
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(45,106,79,0.10) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed; bottom: -100px; left: -80px;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(82,183,136,0.08) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+.container { max-width: 800px; margin: 0 auto; position: relative; z-index: 1; }
+
+/* Header */
+header {
+  text-align: center;
+  margin-bottom: 48px;
+  animation: fadeDown 0.6s ease both;
+}
+
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent-light);
+  color: var(--accent);
+  font-family: 'DM Mono', monospace;
+  font-size: 11px; letter-spacing: 2px;
+  padding: 5px 14px; border-radius: 99px;
+  margin-bottom: 18px;
+  text-transform: uppercase;
+}
+.badge::before { content: '●'; font-size: 8px; }
+
+h1 {
+  font-size: clamp(26px, 5vw, 42px);
+  font-weight: 600; color: var(--text);
+  letter-spacing: -0.5px; line-height: 1.15;
+}
+h1 span {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.subtitle { margin-top: 10px; font-size: 14px; color: var(--muted); }
+
+/* Event card */
+#events-container { display: flex; flex-direction: column; gap: 20px; }
+
+.event-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: fadeUp 0.4s ease both;
+  transition: box-shadow 0.2s;
+  position: relative;
+  z-index: 1;
+}
+.event-card:hover { box-shadow: var(--shadow-md); }
+
+.event-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 15px 22px;
+  background: var(--surface2);
+  border-bottom: 1.5px solid var(--border);
+  cursor: pointer; user-select: none;
+}
+.event-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.event-num { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.event-title-preview {
+  flex: 1; font-size: 15px; font-weight: 500; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.collapse-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 16px; line-height: 1;
+  padding: 3px 6px; border-radius: 6px;
+  transition: background 0.15s, color 0.15s; flex-shrink: 0;
+}
+.collapse-btn:hover { background: var(--border); color: var(--text); }
+.delete-event-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 14px; line-height: 1;
+  padding: 4px 7px; border-radius: 6px;
+  transition: background 0.15s, color 0.15s; flex-shrink: 0;
+}
+.delete-event-btn:hover { background: var(--danger-light); color: var(--danger); }
+
+.event-body { padding: 24px; }
+.event-body.collapsed { display: none; }
+
+/* Section label */
+.section-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px; letter-spacing: 2.5px;
+  text-transform: uppercase; color: var(--accent);
+  margin-bottom: 16px; margin-top: 24px;
+  display: flex; align-items: center; gap: 10px;
+}
+.section-label:first-child { margin-top: 0; }
+.section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* Fields */
+.field { margin-bottom: 16px; }
+.field:last-child { margin-bottom: 0; }
+
+label {
+  display: block; font-size: 12px; font-weight: 500;
+  color: var(--muted); margin-bottom: 7px; letter-spacing: 0.3px;
+}
+
+input[type="text"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="number"],
+textarea, select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: 'Noto Sans TC', sans-serif;
+  font-size: 14px; padding: 11px 14px; outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  appearance: none; -webkit-appearance: none;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent); background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(45,106,79,0.12);
+}
+textarea { resize: vertical; min-height: 88px; line-height: 1.6; }
+
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
+
+/* Toggle */
+.toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.toggle { position: relative; width: 38px; height: 21px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; inset: 0;
+  background: var(--border); border-radius: 99px;
+  cursor: pointer; transition: background 0.2s;
+}
+.slider::before {
+  content: ''; position: absolute;
+  height: 15px; width: 15px; left: 3px; bottom: 3px;
+  background: #fff; border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+.toggle input:checked + .slider { background: var(--accent); }
+.toggle input:checked + .slider::before { transform: translateX(17px); }
+.toggle-label { font-size: 13px; color: var(--muted); cursor: pointer; }
+
+/* Reminders */
+.reminder-list { display: flex; flex-direction: column; gap: 8px; }
+.reminder-item {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 9px 12px;
+  animation: fadeUp 0.2s ease both;
+}
+.reminder-item input[type="number"] {
+  border: none; background: transparent; padding: 0;
+  width: 60px; font-size: 14px; box-shadow: none;
+}
+.reminder-item input[type="number"]:focus { box-shadow: none; border: none; background: transparent; }
+.reminder-item select {
+  border: none; background: transparent;
+  padding: 0 18px 0 0; font-size: 13px; flex: 1; cursor: pointer;
+}
+.reminder-item select:focus { box-shadow: none; }
+.rem-sep { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.rm-btn {
+  background: none; border: none; color: var(--muted);
+  cursor: pointer; font-size: 16px; padding: 2px 5px;
+  border-radius: 6px; transition: color 0.2s, background 0.2s;
+  line-height: 1; margin-left: auto; flex-shrink: 0;
+}
+.rm-btn:hover { color: var(--danger); background: var(--danger-light); }
+.add-rem-btn {
+  background: none; border: 1.5px dashed var(--border);
+  color: var(--muted); width: 100%; padding: 9px;
+  border-radius: 10px; cursor: pointer; font-size: 13px;
+  transition: all 0.2s; margin-top: 8px;
+}
+.add-rem-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+/* Recurrence days */
+.recurrence-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 10px;
+}
+.day-btn {
+  aspect-ratio: 1; background: var(--surface2);
+  border: 1.5px solid var(--border); color: var(--muted);
+  border-radius: 8px; cursor: pointer; font-size: 12px;
+  transition: all 0.15s; font-family: 'Noto Sans TC', sans-serif;
+}
+.day-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+/* Add event button */
+.add-event-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 16px;
+  background: #fff; border: 2px dashed var(--border);
+  border-radius: 16px; color: var(--accent);
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: all 0.2s; margin-top: 4px;
+  position: relative; z-index: 2;
+}
+.download-area { position: relative; z-index: 2; }
+.add-event-btn:hover {
+  border-color: var(--accent); background: var(--accent-light);
+  box-shadow: var(--shadow);
+}
+
+/* Button group */
+.btn-single {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.btn-single .gcal-btn,
+.btn-single .copy-btn { display: none; }
+
+.btn-group-three {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.btn-group-three .download-btn { font-size: 13px; padding: 14px 10px; }
+
+@media (max-width: 600px) {
+  .btn-group-three { grid-template-columns: 1fr; }
+}
+
+.gcal-btn {
+  background: var(--surface) !important;
+  color: var(--accent) !important;
+  border: 2px solid var(--accent) !important;
+  box-shadow: none !important;
+}
+.gcal-btn:hover { background: var(--accent-light) !important; transform: translateY(-1px); box-shadow: var(--shadow) !important; }
+
+.copy-btn {
+  background: var(--surface) !important;
+  color: var(--accent2) !important;
+  border: 2px solid var(--accent2) !important;
+  box-shadow: none !important;
+}
+.copy-btn:hover { background: var(--accent-light) !important; transform: translateY(-1px); box-shadow: var(--shadow) !important; }
+.copy-btn.copied { color: #fff !important; background: var(--accent2) !important; }
+
+/* Preview table */
+.preview-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 600px;
+}
+
+.preview-table thead tr {
+  background: var(--surface2);
+  border-bottom: 1.5px solid var(--border);
+}
+
+.preview-table th {
+  padding: 11px 14px;
+  text-align: left;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.preview-table th:first-child { width: 32px; padding-left: 16px; }
+
+.preview-table td {
+  padding: 12px 14px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.preview-table td:first-child { padding-left: 16px; }
+
+.preview-table tbody tr:last-child td { border-bottom: none; }
+
+.preview-table tbody tr {
+  transition: background 0.15s;
+}
+.preview-table tbody tr:hover { background: var(--surface2); }
+
+.preview-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%; display: inline-block;
+}
+
+.preview-title { font-weight: 500; }
+.preview-time { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.preview-empty { color: var(--muted); font-size: 12px; }
+.preview-tag {
+  display: inline-block;
+  background: var(--accent-light);
+  color: var(--accent);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.preview-allday {
+  background: #e8f3ee;
+  color: var(--accent2);
+}
+
+/* Download */
+.download-area { margin-top: 8px; }
+.download-btn {
+  width: 100%; padding: 17px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+  color: #fff; border: none; border-radius: 14px;
+  font-family: 'Noto Sans TC', sans-serif;
+  font-size: 15px; font-weight: 600; letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(45,106,79,0.25);
+  transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.download-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(45,106,79,0.35); }
+.download-btn:active { transform: scale(0.99); }
+
+.event-count-note { text-align: center; font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+/* Error */
+.error-msg { font-size: 12px; color: var(--danger); margin-top: 5px; display: none; }
+.field.has-error input,
+.field.has-error textarea { border-color: var(--danger); }
+.field.has-error .error-msg { display: block; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 28px; left: 50%;
+  transform: translateX(-50%) translateY(70px);
+  background: var(--text); color: #fff;
+  font-size: 13px; font-weight: 500;
+  padding: 12px 24px; border-radius: 99px;
+  opacity: 0; pointer-events: none;
+  transition: all 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  z-index: 999; white-space: nowrap;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { background: var(--danger); }
+
+select option { background: #fff; color: var(--text); }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="badge">ICS Generator</div>
+    <h1>行事曆事件<br><span>產生器</span></h1>
+    <p class="subtitle">可新增多個事件，一次匯出為單一 .ics 檔案</p>
+  </header>
+
+  <div id="events-container"></div>
+
+  <button class="add-event-btn" onclick="addEvent()" style="margin-top:16px">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    新增事件
+  </button>
+
+  <!-- Preview Table -->
+  <div id="preview-section" style="margin-top:28px; display:none">
+    <div class="preview-header">
+      <span class="section-label" style="margin:0">事件預覽</span>
+    </div>
+    <div class="preview-card">
+      <table class="preview-table" id="preview-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>標題</th>
+            <th>開始時間</th>
+            <th>結束時間</th>
+            <th>地點</th>
+            <th>提醒</th>
+            <th>重複</th>
+          </tr>
+        </thead>
+        <tbody id="preview-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="download-area" style="margin-top:20px">
+    <div id="btn-group" class="btn-single">
+      <button class="download-btn" onclick="generateICS()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        下載 .ics 檔案
+      </button>
+      <button class="download-btn gcal-btn" onclick="openGoogleCalendar()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        加入 Google 日曆
+      </button>
+      <button class="download-btn copy-btn" id="copy-btn" onclick="copyGoogleLink()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        複製分享連結
+      </button>
+    </div>
+    <p class="event-count-note" id="event-count-note">共 0 個事件</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const PALETTE = ['#4f6ef7','#22c9a0','#f7914f','#c94fb5','#f7c94f','#5bc4f7','#a0e060'];
+
+let eventCount = 0;
+let remCounters = {};
+
+const pad = n => String(n).padStart(2,'0');
+const toLocal = d => new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+
+function fmtDT(val, allDay) {
+  if (allDay) return val.replace(/-/g,'');
+  const d = new Date(val);
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+}
+
+// RFC 5545: 全天事件 DTEND 必須是結束日期的隔天（exclusive）
+function fmtDTAllDayEnd(val) {
+  const d = new Date(val + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+}
+
+function toICSMinutes(val, unit) {
+  const n = parseInt(val)||0;
+  return unit==='hours' ? n*60 : unit==='days' ? n*1440 : unit==='weeks' ? n*10080 : n;
+}
+
+let uidCounter = 0;
+function uid() {
+  uidCounter++;
+  const rand = Math.random().toString(36).slice(2,10).toUpperCase();
+  const ts   = Date.now().toString(36).toUpperCase();
+  const seq  = String(uidCounter).padStart(4,'0');
+  return `${rand}-${ts}-${seq}@ics-gen`;
+}
+
+function addEvent() {
+  eventCount++;
+  const id = eventCount;
+  const color = PALETTE[(id-1) % PALETTE.length];
+
+  const now = new Date();
+  now.setMinutes(Math.ceil(now.getMinutes()/15)*15, 0, 0);
+  const later = new Date(now.getTime() + 3600000);
+
+  const card = document.createElement('div');
+  card.className = 'event-card';
+  card.id = `event-${id}`;
+
+  card.innerHTML = `
+    <div class="event-header" onclick="toggleCollapse(${id})">
+      <span class="event-dot" style="background:${color}"></span>
+      <span class="event-num">事件 ${id}</span>
+      <span class="event-title-preview" id="preview-${id}">（未填寫標題）</span>
+      <button class="collapse-btn" id="collapse-btn-${id}" title="展開/收合" onclick="event.stopPropagation();toggleCollapse(${id})">▾</button>
+      <button class="delete-event-btn" title="刪除此事件" onclick="event.stopPropagation();deleteEvent(${id})">✕</button>
+    </div>
+    <div class="event-body" id="body-${id}">
+
+      <div class="section-label">基本資訊</div>
+      <div class="field" id="f-title-${id}">
+        <label>事項標題 *</label>
+        <input type="text" id="title-${id}" placeholder="會議、約診、生日…"
+          oninput="document.getElementById('preview-${id}').textContent=this.value.trim()||'（未填寫標題）'; updatePreview()">
+        <div class="error-msg">請填寫事項標題</div>
+      </div>
+      <div class="field">
+        <label>地點</label>
+        <input type="text" id="location-${id}" placeholder="地點或線上連結" oninput="updatePreview()">
+      </div>
+      <div class="field">
+        <label>描述 / 備註</label>
+        <textarea id="desc-${id}" placeholder="詳細說明、會議連結…"></textarea>
+      </div>
+
+      <div class="section-label">時間設定</div>
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="allday-${id}" onchange="toggleAllDay(${id}); updatePreview()">
+          <span class="slider"></span>
+        </label>
+        <span class="toggle-label" onclick="document.getElementById('allday-${id}').click()">全天事件</span>
+      </div>
+      <div class="row">
+        <div class="field" id="f-start-${id}">
+          <label>開始日期時間 *</label>
+          <input type="datetime-local" id="start-${id}" value="${toLocal(now)}"
+            onchange="validateEndTime(${id}); updatePreview()">
+          <div class="error-msg">請選擇開始時間</div>
+        </div>
+        <div class="field" id="f-end-${id}">
+          <label>結束日期時間 *</label>
+          <input type="datetime-local" id="end-${id}" value="${toLocal(later)}"
+            onchange="validateEndTime(${id}); updatePreview()">
+          <div class="error-msg">結束時間需晚於開始時間</div>
+        </div>
+      </div>
+
+      <div class="section-label">提醒通知</div>
+      <div class="reminder-list" id="rem-list-${id}"></div>
+      <button class="add-rem-btn" onclick="addReminder(${id}); updatePreview()">＋ 新增提醒</button>
+
+      <div class="section-label">重複規則</div>
+      <div class="field">
+        <label>重複頻率</label>
+        <select id="rrule-${id}" onchange="toggleRecur(${id}); updatePreview()">
+          <option value="NONE">不重複</option>
+          <option value="DAILY">每天</option>
+          <option value="WEEKLY">每週</option>
+          <option value="MONTHLY">每月</option>
+          <option value="YEARLY">每年</option>
+        </select>
+      </div>
+      <div id="weekly-days-${id}" style="display:none">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">選擇星期</label>
+        <div class="recurrence-grid">
+          <button class="day-btn" data-day="MO" onclick="toggleDay(this)">一</button>
+          <button class="day-btn" data-day="TU" onclick="toggleDay(this)">二</button>
+          <button class="day-btn" data-day="WE" onclick="toggleDay(this)">三</button>
+          <button class="day-btn" data-day="TH" onclick="toggleDay(this)">四</button>
+          <button class="day-btn" data-day="FR" onclick="toggleDay(this)">五</button>
+          <button class="day-btn" data-day="SA" onclick="toggleDay(this)">六</button>
+          <button class="day-btn" data-day="SU" onclick="toggleDay(this)">日</button>
+        </div>
+      </div>
+      <div id="recur-end-${id}" style="display:none;margin-top:14px">
+        <div class="field">
+          <label>重複結束日期（選填）</label>
+          <input type="datetime-local" id="rrule-until-${id}">
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  document.getElementById('events-container').appendChild(card);
+  remCounters[id] = 0;
+  addReminder(id, 30, 'minutes');
+  updateCount();
+}
+
+function deleteEvent(id) {
+  const card = document.getElementById(`event-${id}`);
+  if (card) { card.style.animation = 'none'; card.remove(); }
+  updateCount();
+}
+
+function toggleCollapse(id) {
+  const body = document.getElementById(`body-${id}`);
+  const btn  = document.getElementById(`collapse-btn-${id}`);
+  body.classList.toggle('collapsed');
+  btn.textContent = body.classList.contains('collapsed') ? '▸' : '▾';
+}
+
+function updateCount() {
+  const n = document.querySelectorAll('.event-card').length;
+  document.getElementById('event-count-note').textContent = `共 ${n} 個事件`;
+  const group = document.getElementById('btn-group');
+  if (n === 1) {
+    group.className = 'btn-group-three';
+    group.querySelectorAll('.gcal-btn, .copy-btn').forEach(b => b.style.display = '');
+  } else {
+    group.className = 'btn-single';
+    group.querySelectorAll('.gcal-btn, .copy-btn').forEach(b => b.style.display = 'none');
+  }
+  updatePreview();
+}
+
+function formatPreviewTime(val, allDay) {
+  if (!val) return '<span class="preview-empty">—</span>';
+  if (allDay) {
+    const [y, m, d] = val.split('-');
+    return `<span class="preview-time">${y}/${m}/${d}</span>`;
+  }
+  const dt = new Date(val);
+  const dateStr = `${dt.getFullYear()}/${pad(dt.getMonth()+1)}/${pad(dt.getDate())}`;
+  const timeStr = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  return `<span class="preview-time">${dateStr}<br>${timeStr}</span>`;
+}
+
+function updatePreview() {
+  const cards = document.querySelectorAll('.event-card');
+  const section = document.getElementById('preview-section');
+  const tbody   = document.getElementById('preview-tbody');
+
+  if (cards.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  const rruleLabel = { NONE:'不重複', DAILY:'每天', WEEKLY:'每週', MONTHLY:'每月', YEARLY:'每年' };
+
+  tbody.innerHTML = '';
+  cards.forEach((card, i) => {
+    const id     = card.id.replace('event-','');
+    const color  = PALETTE[i % PALETTE.length];
+    const allDay = document.getElementById(`allday-${id}`).checked;
+    const title  = document.getElementById(`title-${id}`).value.trim();
+    const loc    = document.getElementById(`location-${id}`).value.trim();
+    const start  = document.getElementById(`start-${id}`).value;
+    const end    = document.getElementById(`end-${id}`).value;
+    const rrule  = document.getElementById(`rrule-${id}`).value;
+
+    // Reminders summary
+    const remItems = card.querySelectorAll('.reminder-item');
+    let remText = '';
+    if (remItems.length === 0) {
+      remText = '<span class="preview-empty">無</span>';
+    } else {
+      const unitLabel = { minutes:'分', hours:'時', days:'天', weeks:'週' };
+      const parts = [...remItems].map(item => {
+        const n = item.querySelector('input[type="number"]').value;
+        const u = item.querySelector('select').value;
+        return `${n}${unitLabel[u]}前`;
+      });
+      remText = parts.map(p => `<span class="preview-tag">${p}</span>`).join(' ');
+    }
+
+    const endInvalid = !!start && !!end && (allDay ? end < start : end <= start);
+    const endTimeCell = endInvalid
+      ? `${formatPreviewTime(end, allDay)} <span style="color:var(--danger);font-size:11px;display:block">⚠ 早於開始</span>`
+      : formatPreviewTime(end, allDay);
+    const allDayBadge = allDay ? '<span class="preview-tag preview-allday" style="margin-left:6px">全天</span>' : '';
+    const titleCell   = title
+      ? `<span class="preview-title">${title}</span>${allDayBadge}`
+      : `<span class="preview-empty">（未填）</span>${allDayBadge}`;
+    const locCell  = loc  ? loc  : '<span class="preview-empty">—</span>';
+    const rruleCell = rrule !== 'NONE'
+      ? `<span class="preview-tag">${rruleLabel[rrule]||rrule}</span>`
+      : '<span class="preview-empty">不重複</span>';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="preview-dot" style="background:${color}"></span></td>
+      <td>${titleCell}</td>
+      <td>${formatPreviewTime(start, allDay)}</td>
+      <td>${endTimeCell}</td>
+      <td>${locCell}</td>
+      <td>${remText}</td>
+      <td>${rruleCell}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function toggleAllDay(id) {
+  const cb   = document.getElementById(`allday-${id}`);
+  const sInp = document.getElementById(`start-${id}`);
+  const eInp = document.getElementById(`end-${id}`);
+  if (cb.checked) {
+    sInp._dt = sInp.value; eInp._dt = eInp.value;
+    sInp.type = 'date'; eInp.type = 'date';
+    sInp.value = (sInp._dt||'').slice(0,10);
+    eInp.value = (eInp._dt||'').slice(0,10);
+  } else {
+    const now2 = new Date(); now2.setMinutes(Math.ceil(now2.getMinutes()/15)*15,0,0);
+    const later2 = new Date(now2.getTime()+3600000);
+    sInp.type = 'datetime-local'; eInp.type = 'datetime-local';
+    sInp.value = sInp._dt || toLocal(now2);
+    eInp.value = eInp._dt || toLocal(later2);
+  }
+}
+
+function addReminder(eventId, val=15, unit='minutes') {
+  remCounters[eventId] = (remCounters[eventId]||0) + 1;
+  const rid  = `rem-${eventId}-${remCounters[eventId]}`;
+  const list = document.getElementById(`rem-list-${eventId}`);
+  const item = document.createElement('div');
+  item.className = 'reminder-item'; item.id = rid;
+  item.innerHTML = `
+    <span class="rem-sep">事件前</span>
+    <input type="number" min="1" max="9999" value="${val}" style="width:60px">
+    <select>
+      <option value="minutes" ${unit==='minutes'?'selected':''}>分鐘</option>
+      <option value="hours"   ${unit==='hours'  ?'selected':''}>小時</option>
+      <option value="days"    ${unit==='days'   ?'selected':''}>天</option>
+      <option value="weeks"   ${unit==='weeks'  ?'selected':''}>週</option>
+    </select>
+    <span class="rem-sep">提醒</span>
+    <button class="rm-btn" onclick="document.getElementById('${rid}').remove(); updatePreview()">×</button>
+  `;
+  list.appendChild(item);
+}
+
+function toggleRecur(id) {
+  const val = document.getElementById(`rrule-${id}`).value;
+  document.getElementById(`weekly-days-${id}`).style.display = val==='WEEKLY' ? 'block' : 'none';
+  document.getElementById(`recur-end-${id}`).style.display   = val!=='NONE'   ? 'block' : 'none';
+}
+
+function toggleDay(btn) { btn.classList.toggle('active'); }
+
+function validateEndTime(id) {
+  const allDay = document.getElementById(`allday-${id}`).checked;
+  const start  = document.getElementById(`start-${id}`).value;
+  const end    = document.getElementById(`end-${id}`).value;
+  // 全天：end >= start；非全天：end > start
+  const endErr = !!end && !!start && (allDay ? end < start : end <= start);
+  document.getElementById(`f-end-${id}`).classList.toggle('has-error', endErr);
+  document.getElementById(`f-start-${id}`).classList.remove('has-error');
+}
+
+function validateAll() {
+  let ok = true;
+  document.querySelectorAll('.event-card').forEach(card => {
+    const id     = card.id.replace('event-','');
+    const title  = document.getElementById(`title-${id}`).value.trim();
+    const start  = document.getElementById(`start-${id}`).value;
+    const end    = document.getElementById(`end-${id}`).value;
+    const allDay = document.getElementById(`allday-${id}`).checked;
+
+    document.getElementById(`f-title-${id}`).classList.toggle('has-error', !title);
+    document.getElementById(`f-start-${id}`).classList.toggle('has-error', !start);
+    // 全天事件：end >= start；非全天：end > start
+    const endErr = !end || (allDay ? end < start : end <= start);
+    document.getElementById(`f-end-${id}`).classList.toggle('has-error', endErr);
+
+    if (!title || !start || endErr) {
+      ok = false;
+      document.getElementById(`body-${id}`).classList.remove('collapsed');
+      document.getElementById(`collapse-btn-${id}`).textContent = '▾';
+    }
+  });
+  return ok;
+}
+
+function generateICS() {
+  const cards = document.querySelectorAll('.event-card');
+  if (cards.length === 0) { showToast('⚠ 請先新增至少一個事件', true); return; }
+  if (!validateAll()) { showToast('⚠ 請檢查標示紅色的欄位', true); return; }
+
+  const now = new Date();
+  const dtStamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}T${pad(now.getHours())}${pad(now.getMinutes())}00Z`;
+
+  // RFC 5545: escape special chars in text fields
+  function escapeText(str) {
+    return str.replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+  }
+
+  // RFC 5545 line folding: lines > 75 octets must be folded (count UTF-8 bytes)
+  function foldLine(line) {
+    const encoder = new TextEncoder();
+    const LIMIT = 75;
+    let result = '';
+    let currentLine = '';
+    let currentBytes = 0;
+    let isFirst = true;
+
+    for (const char of line) {
+      const charBytes = encoder.encode(char).length;
+      if (currentBytes + charBytes > LIMIT) {
+        result += currentLine + '\r\n';
+        currentLine = ' ' + char;
+        currentBytes = 1 + charBytes; // 1 for the leading space
+        isFirst = false;
+      } else {
+        currentLine += char;
+        currentBytes += charBytes;
+      }
+    }
+    if (currentLine) result += currentLine;
+    return result + '\r\n';
+  }
+
+  function prop(name, value) {
+    return foldLine(`${name}:${value}`);
+  }
+
+  let ics = '';
+  ics += 'BEGIN:VCALENDAR\r\n';
+  ics += 'VERSION:2.0\r\n';
+  ics += 'PRODID:-//ICS Calendar Generator//ZH\r\n';
+  ics += 'CALSCALE:GREGORIAN\r\n';
+  ics += 'METHOD:PUBLISH\r\n';
+
+  cards.forEach(card => {
+    const id     = card.id.replace('event-','');
+    const allDay = document.getElementById(`allday-${id}`).checked;
+    const title  = document.getElementById(`title-${id}`).value.trim();
+    const loc    = document.getElementById(`location-${id}`).value.trim();
+    const desc   = document.getElementById(`desc-${id}`).value.trim();
+    const start  = document.getElementById(`start-${id}`).value;
+    const end    = document.getElementById(`end-${id}`).value;
+    const rrule  = document.getElementById(`rrule-${id}`).value;
+    const until  = document.getElementById(`rrule-until-${id}`).value;
+
+    ics += 'BEGIN:VEVENT\r\n';
+    ics += prop('UID', uid());
+    ics += prop('DTSTAMP', dtStamp);
+    ics += allDay
+      ? prop('DTSTART;VALUE=DATE', fmtDT(start, true))
+      : prop('DTSTART', fmtDT(start, false));
+    // RFC 5545: 全天事件 DTEND 是 exclusive，需加一天
+    ics += allDay
+      ? prop('DTEND;VALUE=DATE', fmtDTAllDayEnd(end))
+      : prop('DTEND', fmtDT(end, false));
+    ics += prop('SUMMARY', escapeText(title));
+    if (loc)  ics += prop('LOCATION', escapeText(loc));
+    if (desc) ics += prop('DESCRIPTION', escapeText(desc));
+
+    if (rrule !== 'NONE') {
+      let rruleStr = `FREQ=${rrule}`;
+      if (rrule === 'WEEKLY') {
+        const days = [...card.querySelectorAll('.day-btn.active')].map(b=>b.dataset.day);
+        if (days.length) rruleStr += `;BYDAY=${days.join(',')}`;
+      }
+      if (until) rruleStr += `;UNTIL=${fmtDT(until, false)}`;
+      ics += prop('RRULE', rruleStr);
+    }
+
+    card.querySelectorAll('.reminder-item').forEach(item => {
+      const mins = toICSMinutes(
+        item.querySelector('input[type="number"]').value,
+        item.querySelector('select').value
+      );
+      ics += 'BEGIN:VALARM\r\n';
+      ics += prop('TRIGGER', `-PT${mins}M`);
+      ics += 'ACTION:DISPLAY\r\n';
+      ics += prop('DESCRIPTION', escapeText(`提醒：${title}`));
+      ics += 'END:VALARM\r\n';
+    });
+
+    ics += 'END:VEVENT\r\n';
+  });
+
+  ics += 'END:VCALENDAR\r\n';
+
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = cards.length === 1
+    ? (document.getElementById(`title-${cards[0].id.replace('event-','')}`).value.trim().replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g,'_') || 'event') + '.ics'
+    : `calendar-${cards.length}-events.ics`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`✓ 已下載，共 ${cards.length} 個事件`);
+}
+
+function buildGoogleUrl() {
+  const id     = document.querySelector('.event-card').id.replace('event-','');
+  const allDay = document.getElementById(`allday-${id}`).checked;
+  const title  = document.getElementById(`title-${id}`).value.trim();
+  const loc    = document.getElementById(`location-${id}`).value.trim();
+  const desc   = document.getElementById(`desc-${id}`).value.trim();
+  const start  = document.getElementById(`start-${id}`).value;
+  const end    = document.getElementById(`end-${id}`).value;
+  const fmtG   = (val, isAllDay) => {
+    if (isAllDay) return val.replace(/-/g,'');
+    const d = new Date(val);
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  };
+  const params = new URLSearchParams({ action:'TEMPLATE', text:title, dates:`${fmtG(start,allDay)}/${fmtG(end,allDay)}` });
+  if (loc)  params.set('location', loc);
+  if (desc) params.set('details', desc);
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function openGoogleCalendar() {
+  if (!validateAll()) { showToast('⚠ 請檢查必填欄位', true); return; }
+  window.open(buildGoogleUrl(), '_blank');
+  showToast('✓ 已開啟 Google 日曆');
+}
+
+const copyIconHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+const checkIconHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg>`;
+const loadIconHTML  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
+
+async function copyGoogleLink() {
+  if (!validateAll()) { showToast('⚠ 請檢查必填欄位', true); return; }
+  const btn = document.getElementById('copy-btn');
+  btn.disabled = true;
+  btn.innerHTML = loadIconHTML + ' 縮短中…';
+  let url = buildGoogleUrl();
+  try {
+    const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
+    if (res.ok) { const s = await res.text(); if (s.startsWith('https://tinyurl.com/')) url = s.trim(); }
+  } catch(_) {}
+  try {
+    await navigator.clipboard.writeText(url);
+    btn.classList.add('copied');
+    btn.innerHTML = checkIconHTML + ' 已複製！';
+    showToast('✓ 短網址已複製，可貼到 LINE 分享');
+  } catch(_) { showToast('⚠ 複製失敗', true); }
+  finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = copyIconHTML + ' 複製分享連結'; }, 2500);
+  }
+}
+
+function showToast(msg, err=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (err ? ' err' : '');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+addEvent();
+</script>
+</body>
+</html>
