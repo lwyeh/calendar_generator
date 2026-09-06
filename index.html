@@ -950,10 +950,10 @@ async function copyGoogleLink() {
   let url = buildGoogleUrl();
 
   // ★ 填入你的 GAS Web App 網址
-  const GAS_URL = 'YOUR_GAS_WEBAPP_URL';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbz0IIKHD_MuOYuCYuaD57fZFi7plpM81a7eRbXvZP9LiC0cQZsajdZ2c-u-BaDYQHIaow/exec';
 
   try {
-    const res = await fetch(`${GAS_URL}?url=${encodeURIComponent(url)}`);
+    const res = await fetch(`${GAS_URL}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(location.hostname)}`);
     if (res.ok) {
       const data = await res.json();
       if (data.short_url) url = data.short_url;
