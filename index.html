@@ -948,10 +948,18 @@ async function copyGoogleLink() {
   btn.disabled = true;
   btn.innerHTML = loadIconHTML + ' 縮短中…';
   let url = buildGoogleUrl();
+
+  // ★ 填入你的 GAS Web App 網址
+  const GAS_URL = 'YOUR_GAS_WEBAPP_URL';
+
   try {
-    const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
-    if (res.ok) { const s = await res.text(); if (s.startsWith('https://tinyurl.com/')) url = s.trim(); }
+    const res = await fetch(`${GAS_URL}?url=${encodeURIComponent(url)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.short_url) url = data.short_url;
+    }
   } catch(_) {}
+
   try {
     await navigator.clipboard.writeText(url);
     btn.classList.add('copied');
